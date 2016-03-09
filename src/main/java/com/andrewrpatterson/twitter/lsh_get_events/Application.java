@@ -5,6 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.*;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Created by apatterson on 08/03/2016.
@@ -54,9 +56,21 @@ public class Application {
         //1. get the thread ids
         Set<Long> eventIDs = getThreadIDs();
 
+        System.out.println("Number of clusters: "+eventIDs.size());
+
+
+        int i = 0;
         //2. Perform a query to get set of tweets for each event ID
-        for(Long thread: eventIDs)
+        for(Long thread: eventIDs){
             processEvent(thread);
+            i++;
+
+            if(i%10000 ==0)
+                System.out.println(i+" processed");
+
+
+        }
+            ;
 
     }
 
@@ -67,7 +81,7 @@ public class Application {
 
             //1. get the set of tweets and place id, tweet pairs into map
             List<String> rows = new ArrayList<String>();
-
+            pstmt.setLong(1, thread);
             ResultSet result = pstmt.executeQuery();
             List<List> tokenSet = new ArrayList<List>();
 
@@ -85,16 +99,18 @@ public class Application {
             //2. calculate the entropy
             double entropy = Application.calculateShannonEntropy(tokenSet);
 
-            System.out.println(thread + "\t"+entropy);
+
 
             //3. if the entropy is greater than ENTROPY_THRESHOLD then output to csv
             if(entropy >= ENTROPY_threshold){
+                System.out.println(thread + "\t"+entropy);
                 //output to csv
                 Files.write(Paths.get("events/"+thread+".csv"), rows);
 
             }
         }catch(SQLException e){
             System.out.println("Unable to process event due to SQLException");
+            System.out.println(e);
         } catch (IOException e) {
             System.out.println("Unable to write event to disk");
         }
@@ -106,6 +122,8 @@ public class Application {
         System.out.print("Connecting to Database...");
         Application application = new Application();
         System.out.println("Done");
+
+        if(application != null)
         application.outputEvents();
     }
     public static Double calculateShannonEntropy(List<List> documents) {
@@ -127,19 +145,20 @@ public class Application {
             }
 
         //now for each term, calculate its probability of occurring
-        double entropy = 0d;
-
+        double entropy = 0;
         Iterator it = termFrequencies.entrySet().iterator();
+
+
         while (it.hasNext()) {
             Map.Entry pair = (Map.Entry)it.next();
 
-            double prob = (Integer)pair.getValue() /numberOfTerms;
 
-            entropy += prob*Math.log10(prob);
+            double prob =  (Long)pair.getValue()/(double)numberOfTerms; //one of the operands has to be a double
+            entropy = entropy+ prob*Math.log10(prob);
 
         }
 
-        return entropy;
+        return entropy*-1;
     }
 
 }
