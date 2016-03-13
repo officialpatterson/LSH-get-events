@@ -1,6 +1,7 @@
 package com.andrewrpatterson.twitter.lsh_get_events;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.*;
@@ -13,7 +14,8 @@ import java.util.concurrent.Executors;
  */
 public class Application {
     Connection connection;
-    double ENTROPY_threshold = 3.5;
+    static final double ENTROPY_threshold = 3.5;
+    List<String> events = new ArrayList<String>();
     public Application(){
         try {
 
@@ -67,11 +69,23 @@ public class Application {
 
             if(i%10000 ==0)
                 System.out.println(i+" processed");
-
-
         }
-            ;
+        
 
+        //output events from eventSet
+        try {
+            Files.write(Paths.get("events.csv"),events);
+
+            PrintWriter writer = new PrintWriter("events.csv", "UTF-8");
+
+            for(String e: events){
+                writer.println(e);
+            }
+
+            writer.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private void processEvent(long thread){
@@ -89,30 +103,23 @@ public class Application {
                 rows.add(result.getLong("id") + ", " + result.getString("text"));
 
                 //get the tokens, split them, and add to the tokens array
-                String tokens = result.getString("tokens");
-
-                //split the tokens into a list
-                List<String> items = Arrays.asList(tokens.split("\\s*"));
+                List<String> items = Arrays.asList(result.getString("tokens").split("\\s*"));
                 tokenSet.add(items);
             }
-
-            //2. calculate the entropy
-            double entropy = Application.calculateShannonEntropy(tokenSet);
 
 
 
             //3. if the entropy is greater than ENTROPY_THRESHOLD then output to csv
-            if(entropy >= ENTROPY_threshold){
-                System.out.println(thread + "\t"+entropy);
+            if( Application.calculateShannonEntropy(tokenSet) >= ENTROPY_threshold){
                 //output to csv
-                Files.write(Paths.get("events/"+thread+".csv"), rows);
+
+                System.out.println("Found event");
+                events.add(Long.toString(thread));
 
             }
         }catch(SQLException e){
             System.out.println("Unable to process event due to SQLException");
             System.out.println(e);
-        } catch (IOException e) {
-            System.out.println("Unable to write event to disk");
         }
 
     }
@@ -154,7 +161,7 @@ public class Application {
 
 
             double prob =  (Long)pair.getValue()/(double)numberOfTerms; //one of the operands has to be a double
-            entropy = entropy+ prob*Math.log10(prob);
+            entropy = entropy+ prob*Math.log(prob);
 
         }
 
